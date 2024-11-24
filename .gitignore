@@ -61,10 +61,13 @@ vendor/
 
 # kine database file
 db/
+kine.db/
 
 # build artifacts
 bin/
 dist/
+hack/client/client
+kine
 
 # dapper binaries
 .dapper

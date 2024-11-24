@@ -4,6 +4,7 @@ go 1.23.6
 
 require (
 	github.com/Rican7/retry v0.3.1
+	github.com/davecgh/go-spew v1.1.1
 	github.com/go-sql-driver/mysql v1.9.2
 	github.com/jackc/pgerrcode v0.0.0-20240316143900-6e2875d9b438
 	github.com/jackc/pgx/v5 v5.7.4
@@ -22,6 +23,7 @@ require (
 	go.etcd.io/etcd/client/pkg/v3 v3.5.21
 	go.etcd.io/etcd/client/v3 v3.5.21
 	go.etcd.io/etcd/server/v3 v3.5.21
+	golang.org/x/sys v0.31.0
 	google.golang.org/grpc v1.71.1
 	k8s.io/client-go v0.30.11
 )
@@ -87,7 +89,6 @@ require (
 	golang.org/x/crypto v0.36.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
 	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
 	google.golang.org/genproto v0.0.0-20230822172742-b8732ec3820d // indirect

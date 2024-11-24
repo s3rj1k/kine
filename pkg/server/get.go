@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/davecgh/go-spew/spew"
 	"go.etcd.io/etcd/api/v3/etcdserverpb"
 )
 
@@ -20,5 +21,8 @@ func (l *LimitedServer) get(ctx context.Context, r *etcdserverpb.RangeRequest) (
 		resp.Kvs = []*KeyValue{kv}
 		resp.Count = 1
 	}
+
+	spew.Dump("DEBUG: GET", r, kv)
+
 	return resp, err
 }

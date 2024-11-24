@@ -1,0 +1,41 @@
+# https://docs.k3s.io/advanced#running-k3s-in-docker
+
+# (Console #1): Build and start Kine
+make build && \
+    rm -f kine.db && \
+    ./bin/kine \
+        --endpoint="sqlite://kine.db?cache=shared&mode=rwc" \
+        --watch-progress-notify-interval=5s \
+        --listen-address=0.0.0.0:2379
+
+make build && \
+    rm -rf kine.db && \
+    ./bin/kine \
+        --endpoint="localfs:///root/kine/kine.db" \
+        --watch-progress-notify-interval=5s \
+        --listen-address=0.0.0.0:2379
+
+# (Console #2): Start K3s server
+# https://docs.k3s.io/cli/server
+docker run \
+    --interactive \
+    --tty \
+    --rm \
+    --name k3s-server \
+    --network host \
+    --privileged \
+    --env K3S_DEBUG=true \
+    --env K3S_DATASTORE_ENDPOINT='http://localhost:2379' \
+    docker.io/rancher/k3s:v1.31.7-k3s1 server \
+        --disable-network-policy \
+        --write-kubeconfig-mode "0644"
+
+# (Console #3): Start conformance test
+export K3S_VERSION=$(docker exec k3s-server /bin/sh -c "/bin/k3s --version | grep -o 'v[0-9]\+\.[0-9]\+\.[0-9]\+'")
+docker cp k3s-server:/etc/rancher/k3s/k3s.yaml /root/.kube/config
+
+# https://github.com/kubernetes-sigs/hydrophone
+go install sigs.k8s.io/hydrophone@latest
+
+# ~/go/bin/hydrophone --conformance
+~/go/bin/hydrophone --focus sig-api-machinery
