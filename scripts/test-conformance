@@ -28,6 +28,7 @@ test-conformance() {
         registry.k8s.io/conformance:$version \
         -c 'mkdir -p /root/.kube; sleep 36000'
     docker cp $KUBECONFIG $name:/root/.kube/config
+    docker exec $name kubectl cluster-info
     docker exec $name /usr/local/bin/kubeconformance
 }
 
