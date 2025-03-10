@@ -13,10 +13,10 @@ func countNames(key string, revision int64) (int64, error) {
 	names, err := ReadDirNames(key)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return 0, ErrFileNotFound
+			return revision, ErrFileNotFound
 		}
 
-		return 0, err
+		return revision, err
 	}
 
 	count, _ := filterNames(names, revision)

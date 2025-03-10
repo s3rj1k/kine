@@ -47,7 +47,7 @@ func (*Backend) Compact(ctx context.Context, revision int64) (int64, error) {
 
 		return nil
 	}); err != nil {
-		return 0, err
+		return revision, err
 	}
 
 	// second pass: delete expired and old revision files
@@ -101,7 +101,7 @@ func (*Backend) Compact(ctx context.Context, revision int64) (int64, error) {
 
 		return nil
 	}); err != nil {
-		return 0, err
+		return revision, err
 	}
 
 	slices.SortFunc(emptyDirs, func(a, b string) int {

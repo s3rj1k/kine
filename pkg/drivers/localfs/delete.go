@@ -15,19 +15,19 @@ func (*Backend) Delete(_ context.Context, key string, revision int64) (int64, *s
 	loc, info, err := getInfo(key, revision)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil, true, nil
+			return revision, nil, true, nil
 		}
 
-		return 0, nil, false, err
+		return revision, nil, false, err
 	}
 
 	content, err := os.ReadFile(loc)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil, true, nil
+			return revision, nil, true, nil
 		}
 
-		return 0, nil, false, err
+		return revision, nil, false, err
 	}
 
 	kv := &server.KeyValue{
@@ -41,10 +41,10 @@ func (*Backend) Delete(_ context.Context, key string, revision int64) (int64, *s
 	err = os.Rename(loc, filepath.Join(filepath.Dir(loc), info.String()))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil, true, nil
+			return revision, nil, true, nil
 		}
 
-		return 0, nil, false, err
+		return revision, nil, false, err
 	}
 
 	return revision, kv, true, nil

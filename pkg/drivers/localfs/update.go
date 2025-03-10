@@ -15,10 +15,10 @@ func (b *Backend) Update(ctx context.Context, key string, value []byte, revision
 	rev, kv, err := b.Get(ctx, key, "", 0, revision)
 	if err != nil {
 		if errors.Is(err, ErrFileNotFound) {
-			return 0, nil, false, nil
+			return revision, nil, false, nil
 		}
 
-		return 0, nil, false, err
+		return revision, nil, false, err
 	}
 
 	if kv.ModRevision != revision {
@@ -31,7 +31,7 @@ func (b *Backend) Update(ctx context.Context, key string, value []byte, revision
 
 	newRev, err := b.Create(ctx, key, value, lease)
 	if err != nil {
-		return 0, nil, false, err
+		return revision, nil, false, err
 	}
 
 	return newRev, &server.KeyValue{

@@ -58,16 +58,16 @@ func getInfo(key string, revision int64) (string, Info, error) {
 func (*Backend) Get(_ context.Context, key, _ string, _, revision int64) (int64, *server.KeyValue, error) {
 	loc, info, err := getInfo(key, revision)
 	if err != nil {
-		return 0, nil, err
+		return revision, nil, err
 	}
 
 	content, err := os.ReadFile(loc)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil, ErrFileNotFound
+			return revision, nil, ErrFileNotFound
 		}
 
-		return 0, nil, err
+		return revision, nil, err
 	}
 
 	kv := &server.KeyValue{
