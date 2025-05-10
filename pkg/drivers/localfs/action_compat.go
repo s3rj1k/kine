@@ -52,7 +52,10 @@ func (b *Backend) cleanupEmptyDirs() error {
 func (b *Backend) compact(_ context.Context, revision int64) (int64 /*revision*/, error) {
 	var filesToDelete []string
 
-	// walk the directory tree and collect files that meet deletion criteria
+	// collect all files by key to determine what to delete
+	keyInfos := make(map[string][]Info)
+
+	// walk the directory tree to collect all infos
 	err := filepath.WalkDir(b.DataBasePath, func(fullPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -67,14 +70,43 @@ func (b *Backend) compact(_ context.Context, revision int64) (int64 /*revision*/
 			return nil // we only want to handle valid `Info` paths
 		}
 
-		if info.ModRevision <= revision || info.HasExpired() {
-			filesToDelete = append(filesToDelete, fullPath)
+		key, err := filepath.Rel(b.DataBasePath, filepath.Dir(fullPath))
+		if err != nil {
+			return nil // next
 		}
+
+		keyInfos[key] = append(keyInfos[key], info)
 
 		return nil // next
 	})
 	if err != nil {
 		return revision, err
+	}
+
+	// process each key to determine what to delete
+	for key, infos := range keyInfos {
+		// sort by ModRevision in descending order
+		slices.SortFunc(infos, func(a, b Info) int {
+			return int(b.ModRevision - a.ModRevision)
+		})
+
+		// find the latest expired entry
+		var expiredCutoffRevision int64 = -1
+		for _, info := range infos {
+			if info.HasExpired() && info.ModRevision > expiredCutoffRevision {
+				expiredCutoffRevision = info.ModRevision
+			}
+		}
+
+		// delete all files that should be compacted
+		for _, info := range infos {
+			if info.ModRevision <= revision || // standard compaction
+				info.HasExpired() || // expired files
+				info.ModRevision <= expiredCutoffRevision { // files older than the latest expired entry
+				fullPath := filepath.Join(b.DataBasePath, key, info.String())
+				filesToDelete = append(filesToDelete, fullPath)
+			}
+		}
 	}
 
 	// sort the files by filename in ascending order

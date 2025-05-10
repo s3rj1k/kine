@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestActionWatch(t *testing.T) { // ToDo: fixme
+func TestActionWatch(t *testing.T) {
 	b := setupBackend(t)
 
 	// start the backend

@@ -23,10 +23,10 @@ func (b *Backend) list(_ context.Context, prefix, _ string, _, revision int64, w
 		"/",
 	)
 
-	// collect all KeyValue objects by key
-	m := make(map[string]*server.KeyValue)
+	// collect all Info objects by key to handle expiration logic
+	keyInfos := make(map[string][]Info)
 
-	// walk the directory tree once to collect all KeyValue objects
+	// walk the directory tree to collect all infos
 	err := filepath.WalkDir(b.DataBasePath, func(fullPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -49,44 +49,71 @@ func (b *Backend) list(_ context.Context, prefix, _ string, _, revision int64, w
 
 		// parse info from filename
 		info := NewInfo(d.Name())
-		if info.IsZero() || info.HasExpired() {
+		if info.IsZero() {
 			return nil // next
+		}
+
+		keyInfos[key] = append(keyInfos[key], info)
+
+		return nil // next
+	})
+	if err != nil && !errors.Is(err, filepath.SkipAll) {
+		return nil, err
+	}
+
+	// process each key to find valid KeyValue
+	m := make(map[string]*server.KeyValue)
+
+	for key, infos := range keyInfos {
+		// sort by ModRevision in descending order
+		slices.SortFunc(infos, func(a, b Info) int {
+			return int(b.ModRevision - a.ModRevision)
+		})
+
+		// find the latest expired entry to determine the cutoff
+		var expiredCutoffRevision int64 = -1
+		for _, info := range infos {
+			if info.HasExpired() && info.ModRevision > expiredCutoffRevision {
+				expiredCutoffRevision = info.ModRevision
+			}
+		}
+
+		// find the latest valid entry
+		var selectedInfo Info
+		for _, info := range infos {
+			if !info.HasExpired() && info.ModRevision > expiredCutoffRevision {
+				selectedInfo = info
+
+				break
+			}
+		}
+
+		if selectedInfo.IsZero() {
+			continue // no valid entry for this key
 		}
 
 		var content []byte
 
 		if withContent {
-			content, err = os.ReadFile(fullPath)
+			content, err = os.ReadFile(filepath.Join(b.DataBasePath, key, selectedInfo.String()))
 			if err != nil {
 				if errors.Is(err, os.ErrNotExist) {
-					return nil // next
+					continue
 				}
 
-				return err
+				return nil, err
 			}
 		}
 
 		kv := &server.KeyValue{
 			Key:            key,
-			CreateRevision: info.CreateRevision,
-			ModRevision:    info.ModRevision,
+			CreateRevision: selectedInfo.CreateRevision,
+			ModRevision:    selectedInfo.ModRevision,
 			Value:          content,
-			Lease:          info.GetLeaseTime(),
-		}
-
-		if existing, ok := m[key]; ok {
-			if existing.ModRevision > kv.ModRevision {
-				return nil // next
-			}
+			Lease:          selectedInfo.GetLeaseTime(),
 		}
 
 		m[key] = kv
-
-		return nil // next
-	})
-
-	if err != nil && !errors.Is(err, filepath.SkipAll) {
-		return nil, err
 	}
 
 	kvs := make([]*server.KeyValue, 0, len(m))

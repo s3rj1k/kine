@@ -21,12 +21,12 @@ func TestActionDelete(t *testing.T) {
 	// perform KV delete
 	rev, kv, ok, err := b.Delete(ctx, "a", 1)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), rev)
+	require.Equal(t, int64(2), rev) // delete creates a new revision
 	require.Equal(t, true, ok)
 	require.Equal(t, "a", kv.Key)
 	require.Equal(t, "b", string(kv.Value))
 	require.Equal(t, int64(1), kv.Lease)
-	require.Equal(t, int64(1), kv.ModRevision)
+	require.Equal(t, int64(2), kv.ModRevision)
 	require.Equal(t, int64(1), kv.CreateRevision)
 
 	// create again
@@ -34,14 +34,15 @@ func TestActionDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// delete expired revision
-	rev, _, ok, err = b.Delete(ctx, "a", 1)
-	require.Equal(t, int64(1), rev)
+	rev, kv, ok, err = b.Delete(ctx, "a", 1)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), rev) // should return current counter
 	require.Equal(t, true, ok)
-	require.ErrorIs(t, nil, err)
+	require.Nil(t, kv) // no kv returned for already deleted entry
 
 	// no revision, will delete the latest
 	rev, _, ok, err = b.Delete(ctx, "a", 0)
-	require.Equal(t, int64(2), rev)
+	require.Equal(t, int64(4), rev) // delete creates a new revision
 	require.Equal(t, true, ok)
 	require.ErrorIs(t, nil, err)
 }

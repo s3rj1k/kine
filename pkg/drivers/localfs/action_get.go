@@ -12,7 +12,7 @@ import (
 	"github.com/k3s-io/kine/pkg/server"
 )
 
-func (b *Backend) get(_ context.Context, key, _ string, limit, revision int64) (*server.KeyValue, error) {
+func (b *Backend) get(_ context.Context, key, _ string, _, revision int64) (*server.KeyValue, error) {
 	entries, err := os.ReadDir(filepath.Join(b.DataBasePath, key))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -38,12 +38,21 @@ func (b *Backend) get(_ context.Context, key, _ string, limit, revision int64) (
 		return int(b.ModRevision - a.ModRevision)
 	})
 
+	// find the latest expired entry to determine the cutoff
+	var expiredCutoffRevision int64 = -1
+
+	for _, info := range infos {
+		if info.HasExpired() && info.ModRevision > expiredCutoffRevision {
+			expiredCutoffRevision = info.ModRevision
+		}
+	}
+
 	var selectedInfo Info
 
 	if revision == 0 {
-		// get the latest non-expired version
+		// get the latest non-expired version that is newer than any expired entry
 		for _, info := range infos {
-			if !info.HasExpired() {
+			if !info.HasExpired() && info.ModRevision > expiredCutoffRevision {
 				selectedInfo = info
 
 				break
@@ -52,7 +61,7 @@ func (b *Backend) get(_ context.Context, key, _ string, limit, revision int64) (
 	} else {
 		// get the specific revision or the latest before it
 		for _, info := range infos {
-			if info.ModRevision <= revision && !info.HasExpired() {
+			if info.ModRevision <= revision && !info.HasExpired() && info.ModRevision > expiredCutoffRevision {
 				selectedInfo = info
 
 				break

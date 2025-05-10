@@ -97,10 +97,12 @@ func (b *Backend) streamEventsFromDisk(ctx context.Context, prefix string, start
 				PrevKV: prevKV,
 			}
 		case DeleteEvent:
+			// for delete events, we still have PrevKV pointing to the last value
+			// but KV should be minimal (just key)
 			prevKV := b.findPreviousKV(key, info.ModRevision)
 			event = &server.Event{
 				Delete: true,
-				KV:     currentKV,
+				KV:     &server.KeyValue{Key: key},
 				PrevKV: prevKV,
 			}
 		default:
@@ -149,7 +151,8 @@ func (b *Backend) findPreviousKV(key string, beforeRevision int64) *server.KeyVa
 			continue
 		}
 
-		if bestInfo.IsZero() || info.ModRevision > bestInfo.ModRevision {
+		// for finding previous KV, we want the latest non-deleted version
+		if !info.HasExpired() && (bestInfo.IsZero() || info.ModRevision > bestInfo.ModRevision) {
 			bestInfo = info
 			content, err := os.ReadFile(filepath.Join(b.DataBasePath, key, entry.Name()))
 			if err == nil {
@@ -177,12 +180,23 @@ func (b *Backend) sendEvent(key string, event *server.Event) {
 	}
 
 	getEventRevision := func(event *server.Event) int64 {
+		if event.Delete {
+			// for delete events, use the revision from PrevKV
+			if event.PrevKV != nil {
+				return event.PrevKV.ModRevision + 1 // next revision after the deleted item
+			}
+
+			return -1
+		}
+
 		if event.KV != nil {
 			return event.KV.ModRevision
 		}
+
 		if event.PrevKV != nil {
 			return event.PrevKV.ModRevision
 		}
+
 		return -1
 	}
 

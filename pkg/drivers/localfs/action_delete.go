@@ -21,7 +21,10 @@ func (b *Backend) delete(_ context.Context, key string, revision int64) (*server
 		return nil, false, err
 	}
 
-	var info Info
+	var (
+		info  Info
+		found bool
+	)
 
 	for i := range entries { // find entry matching specified revision
 		val := NewInfo(entries[i].Name())
@@ -31,13 +34,19 @@ func (b *Backend) delete(_ context.Context, key string, revision int64) (*server
 
 		if revision > 0 && val.ModRevision == revision {
 			info = val
-
+			found = true
 			break
 		}
 
 		if revision == 0 {
 			info = val
+			found = true
 		}
+	}
+
+	// if no valid entry found, treat as already deleted
+	if !found {
+		return nil, true, nil
 	}
 
 	loc := filepath.Join(b.DataBasePath, key, info.String())
@@ -51,14 +60,16 @@ func (b *Backend) delete(_ context.Context, key string, revision int64) (*server
 		return nil, false, err
 	}
 
+	// create a new deletion revision for this delete operation
 	newInfo := Info{
 		CreateRevision: info.CreateRevision,
-		ModRevision:    info.ModRevision,
+		ModRevision:    b.IncrementCounter(), // create a new revision for the delete
 		CreationTime:   info.CreationTime,
 		ExpireTime:     info.CreationTime, // mark file as expired
 	}
 
-	err = os.Rename(loc, filepath.Join(filepath.Dir(loc), newInfo.String())) // expire entry
+	// move the old file to the new name with expired timestamp
+	err = os.Rename(loc, filepath.Join(b.DataBasePath, key, newInfo.String()))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, true, nil
@@ -67,24 +78,11 @@ func (b *Backend) delete(_ context.Context, key string, revision int64) (*server
 		return nil, false, err
 	}
 
-	for _, entry := range entries { // expire all older revisions
-		val := NewInfo(entry.Name())
-		if val.IsZero() || val.HasExpired() || val.ModRevision > revision {
-			continue
-		}
-
-		val.ExpireTime = val.CreationTime // mark file as expired
-
-		_ = os.Rename(
-			filepath.Join(b.DataBasePath, key, entry.Name()),
-			filepath.Join(b.DataBasePath, key, val.String()),
-		)
-	}
-
+	// build the KeyValue for the deleted entry
 	kv := &server.KeyValue{
 		Key:            key,
 		CreateRevision: info.CreateRevision,
-		ModRevision:    info.ModRevision,
+		ModRevision:    newInfo.ModRevision, // use the new deletion revision
 		Value:          content,
 		Lease:          info.GetLeaseTime(),
 	}
@@ -97,22 +95,23 @@ func (b *Backend) Delete(ctx context.Context, key string, revision int64) (
 ) {
 	kv, deleted, err := b.delete(ctx, key, revision)
 	if err != nil {
-		return 0, kv, deleted, err
+		return b.ReadCounter(), kv, deleted, err
 	}
 
 	if !deleted {
-		return revision, kv, deleted, nil
+		return b.ReadCounter(), kv, deleted, nil
 	}
 
-	if kv != nil {
-		revision = kv.ModRevision
+	if kv == nil {
+		// entry was already deleted
+		return b.ReadCounter(), nil, true, nil
 	}
 
 	b.sendEvent(key, &server.Event{
 		Delete: true,
-		KV:     &server.KeyValue{},
+		KV:     &server.KeyValue{Key: key},
 		PrevKV: kv,
 	})
 
-	return revision, kv, deleted, nil
+	return kv.ModRevision, kv, deleted, nil
 }
